@@ -1,0 +1,11 @@
+# dsh-mobile bundle patch: inserts the plugin row into a profile roster as a
+# profile bundle layer (the `dsh.bundle.patch` manifest field). Activate with:
+#
+#   dsh plugin --profile <name> add link:J:/ai/phone-agent/dsh-mobile
+#
+# The row is a bare host plugin by package name: exports "." runs in the host
+# process (MobileService provision, agent tools, prompt sections, policy).
+# There is deliberately no browser half in phase 1.
+- insert:
+    - id: mobile
+      name: 'dsh-mobile'

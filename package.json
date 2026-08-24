@@ -1,0 +1,54 @@
+{
+  "name": "dsh-mobile",
+  "version": "0.1.0",
+  "description": "Mobile device capability for DeepSeek Harness: a MobileService capability seam (definition -> provider -> tool consumers), mock/mobile-mcp providers, agent tools (mobile_observe/open_app/tap/type/back), system-prompt + runtime-context contributions, and a tiered execution policy.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./capability": {
+      "types": "./lib/capability/mobile.d.ts",
+      "default": "./lib/capability/mobile.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
+    "src",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@types/node": "^22.10.0",
+    "schemastery": "^3.18.0",
+    "typescript": "~5.7.2",
+    "vitest": "^3.0.0"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0"
+  }
+}
