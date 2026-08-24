@@ -1,42 +1,127 @@
-# dsh-mobile
+﻿# dsh-mobile
 
-DeepSeek Harness 的移动设备能力插件:让 DSH Agent 通过统一的 `MobileService`
-能力缝观察并操作手机。
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 
-**Phase 1(已完成)**:MobileService 能力缝 + Mock + 5 工具 + Context/Policy 契约。
-**Phase 2(已完成)**:MobileMcpProvider 经 MCP 协议接真实 Android 模拟器,已实机验证。
-**不在范围内**:自动聊天、联系人记忆、微信/小红书等上层应用。
+**Give your DeepSeek Harness agent eyes and hands on a phone.**
+dsh-mobile is a mobile device capability plugin: the agent observes the live screen as a
+structured UI tree (no screenshots, no vision model, zero image tokens) and acts through
+five safe tools — observe, open app, tap, type (draft only), back.
 
-## 闭环演示
+[中文文档](README.zh.md)
+
+> **Demo placeholder** — a 30s GIF of the agent driving a real Android emulator goes here.
+> This is the single highest-conversion asset; record one before promoting.
+
+## Why not screenshots?
+
+Most phone-agent stacks feed screenshots to a vision model: slow, expensive, and brittle.
+dsh-mobile drives apps from the native **accessibility tree** via
+[mobile-mcp](https://github.com/mobile-next/mobile-mcp):
+
+- **Fast** — one observe returns the full UI element list in milliseconds
+- **Cheap** — structured text, no image tokens
+- **Reliable** — semantic taps by element id/text, not fragile coordinates
+
+## The loop
 
 ```
-用户:「看看当前手机屏幕是什么状态」
+User: "What's on my phone right now?"
    ↓ DeepSeek Harness
    ↓ dsh-mobile plugin
 mobile_observe()
-   ↓ Mock Provider(phase 2: mobile-mcp)
-结构化 ScreenState
+   ↓ mock provider (offline) / mobile-mcp provider (real device)
+structured ScreenState { app, elements[] }
    ↓
-DSH 基于结果继续行动(open_app → tap → type(草稿)→ back)
+Agent keeps acting: open_app → tap → type (draft) → back
 ```
 
-## 结构
+## Status
+
+- ✅ **Phase 1** — MobileService capability seam, mock provider, 5 agent tools, context/policy contracts
+- ✅ **Phase 2** — MobileMcpProvider over the MCP protocol, verified on a real Android emulator
+  (2026-08-22, Medium_Phone_API_36.0 / emulator-5554: devices → observe (28 elements) →
+  openApp Settings → observe (69 elements) → semantic tap 'Apps' → ELEMENT_NOT_FOUND error path → back)
+- ⬜ **Phase 3** — `mobile_swipe`, screenshot observation, foreground-app awareness (ADB provider), multi-device
+- ⬜ **Phase 4** — Tier-3 send capability (approval-gated), retrieved memory (contacts/conversation summaries)
+
+**Out of scope**: auto-chatting, contact memory, WeChat/RED and other app-level automation.
+
+## Tools
+
+| Tool | What it does |
+|---|---|
+| `mobile_observe` | Foreground app + normalized UI element list (read-only) |
+| `mobile_open_app` | Launch an app by package name or alias |
+| `mobile_tap` | Tap by element id / exact text (coordinates as last resort) |
+| `mobile_type` | Enter a **draft** only — never sends, submits, or publishes |
+| `mobile_back` | Press the device back button |
+
+## Safety by design
+
+Externally consequential actions (sending messages, posting, paying, deleting accounts)
+are **denied by policy** unless the user explicitly authorizes them:
+
+- **Tier 0–4 permission model** — guard-level hard rejects + pre-execute asks
+- `mobile_type` enters drafts only; publishing is out of reach of the tool surface
+- Every tool result is structured and auditable
+
+## Install
+
+```bash
+# into a DSH profile
+dsh plugin --profile <name> add link:J:/ai/phone-agent/dsh-mobile
+```
+
+Optional configuration (the plugin row in the profile's `cordis.yml`):
+
+```yaml
+- id: mobile
+  name: dsh-mobile
+  config:
+    provider: mock           # mock (default, offline) | mobile-mcp (real device)
+    deviceId: emulator-5554  # optional, mobile-mcp only; defaults to first online device
+    announceToAgent: true    # announce the plugin in the system prompt
+    enabled: true
+```
+
+## Real-device verification (Phase 2)
+
+```bash
+# 1. Build the vendored mobile-mcp (use the official npm registry)
+cd ../framework/mobile-mcp
+npm install --ignore-scripts --registry=https://registry.npmjs.org
+npx tsc
+
+# 2. Start an emulator (or attach a real device via adb)
+& "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -avd Medium_Phone_API_36.0
+
+# 3. Build this package + offline tests
+cd ../../dsh-mobile && npm run build && npm test
+
+# 4. Live smoke tests against the provider directly
+node scripts/live-emulator-check.mjs
+node scripts/live-tap-check.mjs
+```
+
+## Architecture
 
 ```
 src/
-├── capability/    MobileService 定义 + ScreenState/UIElement 类型(核心资产)
-├── providers/     mock.ts(脚本化聊天 App)| mobile-mcp.ts(MCP → 真实设备,已验证)
+├── capability/    MobileService definition + ScreenState/UIElement types (the core asset)
+├── providers/     mock.ts (scripted chat app) | mobile-mcp.ts (MCP → real device)
 ├── tools/         mobile_observe / open_app / tap / type / back
-├── context/       system.ts(操作规程)+ runtime.ts(<mobile_runtime>)+ formatter.ts(唯一格式化出口)
-├── policy/        Tier 0-4 权限(guard 硬拒绝 + pre-execute ask)
-└── state/         MobileRuntimeState(派生投影,非 session)
+├── context/       system.ts (operating rules) + runtime.ts (<mobile_runtime>) + formatter.ts
+├── policy/        Tier 0–4 permissions (guard hard-rejects + pre-execute asks)
+└── state/         MobileRuntimeState (derived projection, not session state)
 
 docs/
-├── CONTEXT_ENGINEERING.md    Context 分类/预算/选择/污染防护
-└── HARNESS_ARCHITECTURE.md   能力缝/工具面/权限面/生命周期/版本纪律
+├── CONTEXT_ENGINEERING.md    Context classification / budgets / selection / pollution guards
+└── HARNESS_ARCHITECTURE.md   Capability seams / tool surface / policy / lifecycle / versioning
 ```
 
-## 开发
+## Development
 
 ```bash
 npm install
@@ -45,55 +130,11 @@ npm test
 npm run build
 ```
 
-## 安装进 DSH profile
+## Acceptance
 
-```bash
-dsh plugin --profile <name> add link:J:/ai/phone-agent/dsh-mobile
-```
+> Given "check my phone's current state", the agent picks `mobile_observe` on its own,
+> receives a structured ScreenState, and correctly explains the current UI.
 
-配置(可选):
+## License
 
-```yaml
-# profile 的 cordis.yml 中该插件行
-- id: mobile
-  name: dsh-mobile
-  config:
-    provider: mock        # mock(默认,离线)| mobile-mcp(真实设备,已验证)
-    deviceId: emulator-5554  # 可选,mobile-mcp 专用;缺省取第一台在线设备
-    announceToAgent: true # 在 system prompt 中公告插件
-    enabled: true
-```
-
-## 验收标准
-
-> 输入「查看当前手机状态」,DSH 能自己选择 `mobile_observe`,拿到结构化
-> Mock ScreenState,并基于结果正确解释当前 UI。
-
-## Roadmap
-
-1. ✅ Phase 1:MobileService + Mock + 5 工具 + Context/Policy 契约
-2. ✅ Phase 2:MobileMcpProvider 经 MCP 协议接真实 Android 模拟器
-   (2026-08-22 在 Medium_Phone_API_36.0 / emulator-5554 验证:
-   devices → observe(28 元素)→ openApp Settings → observe(69 元素)→
-   语义 tap 'Apps' → ELEMENT_NOT_FOUND 错误路径 → back)
-3. ⬜ Phase 3:`mobile_swipe` 工具暴露、截图观察、前台 App 感知(需 ADB provider)、多设备
-4. ⬜ Phase 4:Tier-3 发送能力(接 approval)+ Retrieved Memory(联系人/会话摘要)
-
-## 真实设备验证(Phase 2)
-
-```bash
-# 1. 构建 vendored mobile-mcp(npmmirror 缺 mobilecli,需官方 registry)
-cd ../framework/mobile-mcp
-npm install --ignore-scripts --registry=https://registry.npmjs.org
-npx tsc
-
-# 2. 启动模拟器(或接真机 adb)
-& "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -avd Medium_Phone_API_36.0
-
-# 3. 本包构建 + 离线测试
-cd ../../dsh-mobile && npm run build && npm test
-
-# 4. 真实设备冒烟(不动 DSH,直接打 provider)
-node scripts/live-emulator-check.mjs
-node scripts/live-tap-check.mjs
-```
+Apache-2.0
